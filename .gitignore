@@ -31,4 +31,8 @@ go.work.sum
 # .idea/
 # .vscode/
 
+# binary name 
 GoZip
+
+# zipped files 
+*.gz
