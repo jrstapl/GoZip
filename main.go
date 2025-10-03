@@ -13,6 +13,11 @@ import (
 	"strings"
 )
 
+var (
+	ErrImproperByteStringDenomination = errors.New("improper string provided for byte conversion")
+	ErrInteger64Conversion            = errors.New("convert to int64")
+)
+
 var modCharMap = map[string]int64{
 	"G": 1e9,
 	"M": 1e6,
@@ -55,7 +60,15 @@ func main() {
 		outputFilename = ""
 	}
 
-	copySize := covertStringSizeToBytes(copySizeStr)
+	copySize, err := convertStringSizeToBytes(copySizeStr)
+
+	if err == ErrImproperByteStringDenomination {
+		log.Fatalf("size modifier conversion (%s): %v\n", copySizeStr, err)
+	} else if err == ErrInteger64Conversion {
+		log.Fatalf("integer conversion (%s): %v\n", copySizeStr, err)
+	} else if err != nil {
+		log.Fatalln("convert string to bytes:", err)
+	}
 
 	switch prog {
 	case "compress":
@@ -76,7 +89,7 @@ func main() {
 			// no reason to error terminate if one file
 			// can't be removed, just let user know
 			if err != nil {
-				log.Println("unable to remove:", file, "\n", err, "\n")
+				log.Println("unable to remove:", file, "\n", err)
 			}
 
 		}
@@ -181,8 +194,8 @@ func decompress(outputFilename string, copySize int64, filenames ...string) {
 
 func compressCopierN(w io.Writer, r io.Reader, size int64) error {
 
-	// this feels like a real hack, but it's all I can come up with now
-	// in theory, there exists a file somewhere that will be the exact size
+	// this feels hackish, but it's the easiest starting solution.
+	// In theory, there exists a file somewhere that will be the exact size
 	// provided and in that case the total size will just need to be bumped up
 	// to allow more larger files, this won't really change that much, but it
 	// will prevent a "zip bomb" in the event that one is encountered.
@@ -202,7 +215,7 @@ func compressCopierN(w io.Writer, r io.Reader, size int64) error {
 
 }
 
-func covertStringSizeToBytes(sizeStr string) int64 {
+func convertStringSizeToBytes(sizeStr string) (int64, error) {
 	sizeInt, err := strconv.ParseInt(sizeStr, 10, 64)
 
 	// non-conventional, but the meat of the function is only going to
@@ -210,7 +223,7 @@ func covertStringSizeToBytes(sizeStr string) int64 {
 	// bytes
 
 	if err == nil {
-		return sizeInt
+		return sizeInt, nil
 	}
 
 	modChar := sizeStr[len(sizeStr)-1:]
@@ -220,15 +233,18 @@ func covertStringSizeToBytes(sizeStr string) int64 {
 	mod, exists := modCharMap[modChar]
 
 	if !exists {
-		log.Fatalln("Unable to use", modChar, "as modifier for bytes")
+
+		return int64(-1), ErrImproperByteStringDenomination
+
 	}
 
 	sizeInt, err = strconv.ParseInt(sizeStr[:len(sizeStr)-1], 10, 64)
 
 	if err != nil {
-		log.Fatalln("Unable to convert", sizeStr, "to int")
+		return int64(-1), ErrInteger64Conversion
+
 	}
 
-	return sizeInt * mod
+	return sizeInt * mod, nil
 
 }
